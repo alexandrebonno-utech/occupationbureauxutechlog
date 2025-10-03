@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disponibilité des Bureaux</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Style pour les infobulles */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 160px;
+            background-color: #374151;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 150%;
+            left: 50%;
+            margin-left: -80px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #374151 transparent transparent transparent;
+        }
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* Amélioration de la responsivité de l'image */
+        #office-plan-container img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl bg-white rounded-lg shadow-lg p-6 md:p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Disponibilité des Bureaux</h1>
+            <p class="text-gray-500 mt-2">Statut pour le prochain jour ouvré : <span id="target-date" class="font-semibold text-gray-700"></span></p>
+        </div>
+
+        <!-- Conteneur pour le plan et les indicateurs -->
+        <div id="office-plan-container" class="relative w-full max-w-2xl mx-auto">
+            <!-- Le plan de bureau en image -->
+            <img src="bureaux.drawio.png" alt="Plan des bureaux" class="rounded-md select-none">
+            
+            <!-- Les indicateurs de présence seront injectés ici par JavaScript -->
+        </div>
+
+        <div class="mt-8 flex justify-center items-center space-x-6 text-sm">
+             <div class="flex items-center">
+                <span class="w-4 h-4 rounded-full bg-green-500 mr-2 border-2 border-white ring-1 ring-green-600"></span>
+                <span>Bureau disponible (Télétravail)</span>
+            </div>
+            <div class="flex items-center">
+                <span class="w-4 h-4 rounded-full bg-orange-500 mr-2 border-2 border-white ring-1 ring-orange-600"></span>
+                <span>Bureau occupé</span>
+            </div>
+             <div class="flex items-center">
+                <span class="w-4 h-4 rounded-full bg-red-500 mr-2 border-2 border-white ring-1 ring-red-600"></span>
+                <span>Erreur</span>
+            </div>
+             <div class="flex items-center">
+                <span class="w-4 h-4 rounded-full bg-gray-400 mr-2 border-2 border-white ring-1 ring-gray-500"></span>
+                <span>Statut inconnu</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const people = [
+            { name: "Hervé L", email: "herve.labonne@systeme-u.fr", top: '18%', left: '15%' },
+            { name: "Alan", email: "alan.piriou@systeme-u.fr", top: '18%', left: '35%' },
+            { name: "Coraline", email: "coraline.mahe@systeme-u.fr", top: '48%', left: '15%' },
+            { name: "Florian", email: "florian.surin@systeme-u.fr", top: '48%', left: '35%' },
+            { name: "Anne", email: "anne.gaillet@systeme-u.fr", top: '78%', left: '15%' },
+            { name: "Hervé B", email: "herve.bazire@systeme-u.fr", top: '78%', left: '35%' },
+            { name: "Valérie", email: "valerie.bize@systeme-u.fr", top: '18%', left: '75%' },
+            { name: "Cindy", email: "cindy.moust@systeme-u.fr", top: '48%', left: '75%' },
+            { name: "Alice", email: "alice.poiblaud@systeme-u.fr", top: '78%', left: '75%' }
+        ];
+
+        function getNextBusinessDay() {
+            const today = new Date();
+            let tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            if (tomorrow.getDay() === 6) { // Samedi
+                tomorrow.setDate(tomorrow.getDate() + 2);
+            } else if (tomorrow.getDay() === 0) { // Dimanche
+                 tomorrow.setDate(tomorrow.getDate() + 1);
+            }
+            return tomorrow;
+        }
+
+        /**
+         * **FONCTION MISE À JOUR**
+         * Appelle le Google Apps Script pour récupérer le statut réel.
+         * @param {string} email L'email de la personne.
+         * @returns {Promise<string>} Une promesse qui résout avec le statut : "Bureau", "Domicile" ou "Inconnu".
+         */
+        async function getCalendarStatus(email) {
+            const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfEM0cFdnkZkUod_sUBg6qaL2aAnH7LKyicIuGgzQPwMQXxy39Zg5WLJL0Q7gYB0PJjQ/exec"; 
+            
+            const url = `${SCRIPT_URL}?email=${encodeURIComponent(email)}`;
+
+            try {
+                // Appel direct au script pour récupérer le statut au format JSON.
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Erreur réseau: ${response.statusText}`);
+                }
+                const data = await response.json();
+                return data.status || "Inconnu";
+
+            } catch (error) {
+                console.error(`Impossible de récupérer le statut pour ${email}:`, error);
+                // Si une erreur survient (souvent une erreur CORS si le script n'est pas bien déployé), 
+                // elle sera visible dans la console du navigateur.
+                return "Erreur"; 
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const planContainer = document.getElementById('office-plan-container');
+            const targetDateElement = document.getElementById('target-date');
+            
+            const nextBusinessDay = getNextBusinessDay();
+            targetDateElement.textContent = nextBusinessDay.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            people.forEach(person => {
+                const indicator = document.createElement('div');
+                indicator.className = 'tooltip absolute w-6 h-6 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300';
+                indicator.style.top = person.top;
+                indicator.style.left = person.left;
+
+                const tooltipText = document.createElement('span');
+                tooltipText.className = 'tooltip-text';
+                
+                indicator.classList.add('bg-gray-400', 'animate-pulse');
+                tooltipText.textContent = `${person.name} (Chargement...)`;
+
+                indicator.appendChild(tooltipText);
+                planContainer.appendChild(indicator);
+
+                getCalendarStatus(person.email)
+                    .then(status => {
+                        indicator.classList.remove('bg-gray-400', 'animate-pulse');
+                        
+                        let statusText = '';
+                        switch (status) {
+                            case "Domicile":
+                                indicator.classList.add('bg-green-500', 'border-2', 'border-white', 'ring-2', 'ring-green-600');
+                                statusText = 'En télétravail';
+                                break;
+                            case "Bureau":
+                                indicator.classList.add('bg-orange-500', 'border-2', 'border-white', 'ring-2', 'ring-orange-600');
+                                statusText = 'Au bureau';
+                                break;
+                            case "Erreur":
+                                indicator.classList.add('bg-red-500', 'border-2', 'border-white', 'ring-2', 'ring-red-600');
+                                statusText = 'Erreur de récupération';
+                                break;
+                            default: // Inconnu
+                                indicator.classList.add('bg-gray-400', 'border-2', 'border-white', 'ring-2', 'ring-gray-500');
+                                statusText = 'Statut inconnu';
+                        }
+                        tooltipText.textContent = `${person.name} - ${statusText}`;
+                    })
+                    .catch(error => {
+                        console.error(`Erreur pour ${person.name}:`, error);
+                        indicator.classList.remove('bg-gray-400', 'animate-pulse');
+                        indicator.classList.add('bg-red-500');
+                        tooltipText.textContent = `${person.name} - Erreur`;
+                    });
+            });
+        });
+    </script>
+
+</body>
+</html>
+
+
