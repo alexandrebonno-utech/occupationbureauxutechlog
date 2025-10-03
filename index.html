@@ -74,16 +74,13 @@
             <div class="flex flex-wrap justify-center items-center gap-x-6 gap-y-2 text-sm text-slate-700">
                 <div class="flex items-center">
                     <span class="w-4 h-4 rounded-full bg-emerald-400 mr-2 border border-emerald-500"></span>
-                    <span>Présent(e)</span>
+                    <span>Libre</span>
                 </div>
                 <div class="flex items-center">
                     <span class="w-4 h-4 rounded-full bg-slate-300 mr-2 border border-slate-400"></span>
-                    <span>Absent(e)</span>
+                    <span>Occupé</span>
                 </div>
-                 <div class="flex items-center">
-                    <span class="w-4 h-4 rounded-full bg-white mr-2 border-2 border-dashed border-slate-300"></span>
-                    <span>Libre</span>
-                </div>
+                 
             </div>
         </div>
 
@@ -208,9 +205,9 @@
                     if (employee) {
                         const isPresent = employee.presence.includes(selectedDate);
                         if (isPresent) {
-                            deskElement.classList.add('bg-emerald-400', 'text-emerald-900', 'border-2', 'border-emerald-500');
-                        } else {
                             deskElement.classList.add('bg-slate-300', 'text-slate-600', 'border-2', 'border-slate-400');
+                        } else {
+                            deskElement.classList.add('bg-emerald-400', 'text-emerald-900', 'border-2', 'border-emerald-500');
                         }
                         content = `<span class="font-bold text-base">${employee.name}</span>`;
                     } else {
