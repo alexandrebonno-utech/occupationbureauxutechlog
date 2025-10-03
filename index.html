@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualiseur de Présence au Bureau</title>
+    <!-- Utilisation de Tailwind CSS pour un design rapide et moderne -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Police personnalisée pour une meilleure lisibilité */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* bg-slate-50 */
+        }
+        /* MODIFIÉ : Taille des cellules réduite et centrage du contenu */
+        .desk {
+            transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, color 0.3s ease-in-out;
+            min-height: 20px; /* 96px, anciennement 8rem */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        #refresh-button {
+            transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, color 0.3s ease-in-out;
+        }
+        /* Style pour l'état de chargement */
+        #loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 lg:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- En-tête de l'application -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-slate-800">Plan de Présence au Bureau de la ligne Logistique</h1>
+            <p class="mt-2 text-lg text-slate-600">Sélectionnez une date pour voir qui est présent.</p>
+            <p class="text-sm text-slate-500 mt-2">Note : Les modifications apportées au Google Sheet peuvent prendre jusqu'à 5 minutes pour apparaître.</p>
+            <!-- AJOUTÉ : Élément pour afficher la date de rafraîchissement -->
+            <p id="last-refresh-time" class="text-sm text-slate-500 mt-1"></p>
+        </header>
+
+        <!-- MODIFIÉ : Section des contrôles et légende regroupés -->
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-6 mb-8">
+            <!-- Groupe date et rafraîchissement -->
+            <div class="flex justify-center items-center gap-4">
+                <div class="relative rounded-md shadow-sm">
+                    <label for="date-filter" class="absolute -top-3 left-2 inline-block bg-slate-50 px-1 text-sm font-medium text-slate-700">Date</label>
+                    <input type="date" id="date-filter" class="block w-full rounded-md border-0 py-2.5 px-4 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6">
+                </div>
+                <button id="refresh-button" class="inline-flex items-center justify-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50">
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201-4.42 5.5 5.5 0 0 1 1.023-2.025A5.5 5.5 0 0 1 10 3a5.5 5.5 0 0 1 5.5 5.5c0 1.258-.413 2.41-1.115 3.324l-1.073-1.073a3.5 3.5 0 1 0-4.95-4.95l-1.073-1.073a5.5 5.5 0 1 1 7.778 7.778zM10 18a.75.75 0 0 1-.75-.75V11a.75.75 0 0 1 1.5 0v6.25A.75.75 0 0 1 10 18z" clip-rule="evenodd" />
+                    </svg>
+                    Rafraîchir
+                </button>
+            </div>
+
+            <!-- Groupe légende -->
+            <div class="flex flex-wrap justify-center items-center gap-x-6 gap-y-2 text-sm text-slate-700">
+                <div class="flex items-center">
+                    <span class="w-4 h-4 rounded-full bg-emerald-400 mr-2 border border-emerald-500"></span>
+                    <span>Présent(e)</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="w-4 h-4 rounded-full bg-slate-300 mr-2 border border-slate-400"></span>
+                    <span>Absent(e)</span>
+                </div>
+                 <div class="flex items-center">
+                    <span class="w-4 h-4 rounded-full bg-white mr-2 border-2 border-dashed border-slate-300"></span>
+                    <span>Libre</span>
+                </div>
+            </div>
+        </div>
+
+        <main id="seating-plan" class="grid gap-2 sm:gap-3">
+            <!-- Indicateur de chargement -->
+            <div id="loader-container" class="col-span-full text-center p-8">
+                <div id="loader"></div>
+                <p class="text-slate-600">Chargement des données depuis Google Sheets...</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const googleSheetCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSQIQlc7LfYaZdaB9FWT2I5Sq4cqGSpIoc77ola369bELlsLb1ziEFuKSAPOjJPyLkk8UQojXrUG4fH/pub?gid=1264042606&single=true&output=csv';
+
+        // --- MODIFIEZ LE PLAN DU BUREAU ICI ---
+        const officeGrid = [
+            ['A1', 'A2', 'A3'],
+            ['B1', 'B2', 'B3'],
+            [null, null, null], // <-- Espace
+            ['C1', 'C2', 'C3'],
+            ['D1', 'D2', 'D3'],
+            [null, null, null], // <-- Espace
+            ['E1', 'E2', 'E3'],
+            ['F1', 'F2', 'F3'],
+            [null, null, null], // <-- Espace
+            ['G1', 'G2', 'G3'],
+            ['H1', 'H2', 'H3'],
+            [null, null, null], // <-- Espace
+            ['I1', 'I2', 'I3'],
+            ['J1', 'J2', 'J3'],
+            [null, null, null], // <-- Espace
+            ['K1', 'K2', 'K3'],
+            ['L1', 'L2', 'L3']
+        ];
+
+        let employeeData = [];
+
+        // --- LOGIQUE DE L'APPLICATION ---
+        const dateFilter = document.getElementById('date-filter');
+        const seatingPlan = document.getElementById('seating-plan');
+        const loaderContainer = document.getElementById('loader-container');
+        const refreshButton = document.getElementById('refresh-button');
+        const lastRefreshTimeElement = document.getElementById('last-refresh-time'); // <-- NOUVEAU
+        const originalRefreshButtonContent = refreshButton.innerHTML;
+
+        // AJOUTÉ : Fonction pour mettre à jour l'heure de rafraîchissement
+        function updateLastRefreshDisplay() {
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+            lastRefreshTimeElement.textContent = `Dernière actualisation : ${now.toLocaleDateString('fr-FR', options)}`;
+        }
+
+        async function fetchAndProcessData() {
+            try {
+                const urlWithCacheBust = `${googleSheetCsvUrl}&_=${Date.now()}`;
+                const response = await fetch(urlWithCacheBust, { cache: 'no-store' });
+                if (!response.ok) throw new Error('Erreur réseau.');
+
+                const csvText = await response.text();
+                const rows = csvText.split('\n').map(row => row.trim().split(','));
+
+                const employeeMap = new Map();
+                rows.slice(1).forEach(row => {
+                    if (row.length < 2) return; 
+                    const name = row[0]?.trim();
+                    const seat = row[1]?.trim();
+
+                    if (!name || !seat) return;
+
+                    if (!employeeMap.has(name)) {
+                        employeeMap.set(name, { id: employeeMap.size + 1, name, seat, presence: [] });
+                    }
+                    employeeMap.get(name).seat = seat;
+
+                    if (row.length >= 4) {
+                        const date = row[2]?.trim();
+                        const status = row[3]?.trim().toLowerCase();
+
+                        if (date && (status === 'bureau' || status === 'présent')) {
+                            const parts = date.split('/');
+                            if (parts.length === 3) {
+                                const formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                employeeMap.get(name).presence.push(formattedDate);
+                            }
+                        }
+                    }
+                });
+
+                employeeData = Array.from(employeeMap.values());
+                return true;
+            } catch (error) {
+                console.error("Impossible de charger ou de traiter les données :", error);
+                seatingPlan.innerHTML = `<p class="col-span-full text-center text-red-600 font-semibold">Erreur : Impossible de charger les données. Vérifiez l'URL et la structure du fichier.</p>`;
+                return false;
+            }
+        }
+
+        function updatePlan(selectedDate) {
+            seatingPlan.innerHTML = '';
+            
+            const maxColumns = officeGrid.reduce((max, row) => Math.max(max, row.length), 0);
+            if (maxColumns === 0) {
+                seatingPlan.innerHTML = `<p class="col-span-full text-center text-slate-600">Le plan du bureau (variable officeGrid) n'est pas configuré.</p>`;
+                return;
+            }
+            seatingPlan.style.gridTemplateColumns = `repeat(${maxColumns}, minmax(0, 1fr))`;
+
+            officeGrid.flat().forEach(seatId => {
+                if (seatId === null) {
+                    const spacer = document.createElement('div');
+                    spacer.classList.add('desk'); 
+                    spacer.style.visibility = 'hidden'; 
+                    seatingPlan.appendChild(spacer);
+                } else {
+                    const employee = employeeData.find(e => e.seat === seatId);
+                    const deskElement = document.createElement('div');
+                    deskElement.classList.add('desk', 'p-2', 'rounded-lg', 'shadow-md');
+
+                    let content = '';
+                    if (employee) {
+                        const isPresent = employee.presence.includes(selectedDate);
+                        if (isPresent) {
+                            deskElement.classList.add('bg-emerald-400', 'text-emerald-900', 'border-2', 'border-emerald-500');
+                        } else {
+                            deskElement.classList.add('bg-slate-300', 'text-slate-600', 'border-2', 'border-slate-400');
+                        }
+                        content = `<span class="font-bold text-base">${employee.name}</span>`;
+                    } else {
+                        deskElement.classList.add('bg-white', 'text-slate-400', 'border-2', 'border-dashed', 'border-slate-300');
+                        content = `<span class="font-medium">${seatId}</span><span class="text-sm mt-1">Libre</span>`;
+                    }
+                    deskElement.innerHTML = content;
+                    seatingPlan.appendChild(deskElement);
+                }
+            });
+        }
+
+        async function handleRefresh() {
+            refreshButton.disabled = true;
+            refreshButton.innerHTML = `<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Chargement...`;
+            
+            const dataLoaded = await fetchAndProcessData();
+            if (dataLoaded) {
+                updatePlan(dateFilter.value);
+                updateLastRefreshDisplay(); // <-- MISE À JOUR ICI
+            }
+            
+            refreshButton.disabled = false;
+            refreshButton.innerHTML = `Actualisé ✓`;
+            refreshButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
+            refreshButton.classList.add('bg-emerald-600');
+
+            setTimeout(() => {
+                refreshButton.innerHTML = originalRefreshButtonContent;
+                refreshButton.classList.remove('bg-emerald-600');
+                refreshButton.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
+            }, 2000); 
+        }
+
+        refreshButton.addEventListener('click', handleRefresh);
+
+        dateFilter.addEventListener('change', (event) => {
+            updatePlan(event.target.value);
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            loaderContainer.style.display = 'block';
+            seatingPlan.style.display = 'none';
+            const dataLoaded = await fetchAndProcessData();
+
+            loaderContainer.style.display = 'none';
+            seatingPlan.style.display = 'grid';
+
+            if (dataLoaded) {
+                const allPresenceDates = employeeData.flatMap(e => e.presence).sort();
+                const initialDate = allPresenceDates.length > 0 ? allPresenceDates[0] : new Date().toISOString().split('T')[0];
+                dateFilter.value = initialDate;
+                updatePlan(initialDate);
+                updateLastRefreshDisplay(); // <-- MISE À JOUR ICI
+            }
+        });
+    </script>
+</body>
+</html>
+
